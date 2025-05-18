@@ -1,0 +1,330 @@
+--- Logic : KTB
+
+load ./base .
+load ./analiticity .
+
+--- Sets for KTB and dependencies 
+fmod KTB-SPEC is
+    pr STATE .
+
+    --- ---------------
+    var V  : BValue .
+    --- ---------------
+
+    --- Sets 
+    ops ALL D ND N I P PN : -> SetBValue .
+    eq D = T, t .
+    eq ND = F, f .
+    eq N = T .
+    eq I = F .
+    eq P = T, t, f .
+    eq PN = F, f, t .
+    eq ALL = T, t, F, f .
+
+    --- Dependencies 
+    op arrow : Value   -> SetBValue .
+    eq arrow(t) = f .
+    eq arrow(f) = t .
+    eq arrow(V) = empty [owise] .
+
+    op arrow2 : Value   -> SetBValue .
+    eq arrow2(V) = empty .
+
+    --- Support (values in the relCondition)
+    op support : Value -> SetBValue .
+    eq support(T) = T, t .
+    eq support(F) = F, f .
+    eq support(t) = T, t, f .
+    eq support(f) = F, t, f .
+    eq support(V) = ALL [owise] .
+endfm
+
+
+view KTB from TH-LOGIC to KTB-SPEC is endv
+
+--- Procedures for checking whether the matrix is OK
+mod KTB-CHECK is
+    pr CHECK-REL{ KTB } .
+
+    --- --------------------
+    vars V VNEW VNEW'  : BValue .
+    vars VA VB VC : BValue .
+    var N         : Nat .
+    vars ROWS ROWS' : Matrix .
+    vars ASSG ASSG' : SetAssignment .
+    vars ID ID' : Id .
+    --- --------------------
+
+    --- Checking if the matrix satisfies the conditions 
+    op check : Matrix -> Bool .
+    op checkRel : Row Matrix -> Bool .
+    op checkArrow : Matrix Matrix -> Bool .
+
+    eq check ( ([ ASSG ] : 1 , ROWS)) = checkRel( [ ASSG ] : 1, ROWS) and-then 
+                                     checkArrow(( [ ASSG ] : 1      ), ([ ASSG ] : 1, ROWS)) .
+
+    --- No more rows to be checked 
+    eq checkRel ( [ ASSG ] : 1, empty) = true .
+    --- A row generated from 1 must be checked 
+    eq checkRel (  [ NEW : VNEW , ASSG  ] : 1,
+                  ([ NEW : VNEW', ASSG' ] : N <- 1, ROWS)) = check-rel(VNEW, VNEW') and-then
+       checkRel( [ NEW : VNEW, ASSG ] : 1, ROWS) .
+
+
+endm
+
+--- In KTB, there are two cases for BOX.
+--- In the first case, 
+        --- there is no t successor A. OR
+        --- there is no T successor A.
+--- In this case, we extend with upper cases .
+mod KTB-CASE-BOX1 is
+    pr KTB-CHECK .
+
+    --- --------------------
+    var V : BValue .
+    var ROWS  : Matrix .
+    var ROW   : Row .
+    vars ASSG ASSG' : SetAssignment .
+    vars ID ID' : Id .
+    --- --------------------
+
+    --- Extending box 
+    op box : BValue        -> BValue .
+    op box' : BValue        -> SetBValue .
+
+    --- Extending the matrix
+    eq box(T) = T .
+    eq box(V) = F [owise] . 
+
+    eq box'(T) = T, t .
+    eq box'(t) = F, f . 
+    eq box'(f) = F .
+    eq box'(F) = F . 
+
+    op valid-case? : Matrix -> Bool .
+    eq valid-case?( ([ A : t, ASSG  ] : ID, 
+                     [ A : T, ASSG' ] : ID', ROWS)) = false .
+
+    eq valid-case?(ROWS) = true [owise] .
+
+    --- Box assigns only T/F that don't need any support 
+    eq checkArrow(ROW, ROWS) = true .
+
+
+
+endm 
+
+view KTB-Case-Box1 from TH-BOX to KTB-CASE-BOX1 is endv
+
+mod CHECK-ANALITICITY-BOX1 is
+    pr ANALITICITY-BOX{KTB, KTB-Case-Box1} .
+endm
+
+--- In the second case, there is a row w where w(A) = t AND a row where A is T . 
+--- In this case, we extend with lower cases, whenever possible .
+mod KTB-CASE-BOX2 is
+    pr KTB-CHECK .
+
+    --- --------------------
+    vars V V' : BValue .
+    vars VA VB VC : BValue .
+    var ROWS  : Matrix .
+    var ROW : Row .
+    vars ASSG ASSG' : SetAssignment .
+    vars ID ID' : Id .
+    var SV  : SetBValue . 
+    --- --------------------
+    var N : Nat .
+
+    --- Extending box 
+    op box : BValue        -> BValue .
+    op box' : BValue        -> SetBValue .
+
+    --- Extending the matrix 
+    eq box(T) = t .
+    eq box(t) = f . 
+    eq box(f) = F .
+    eq box(F) = F . 
+
+    --- By symmetry, if there is a t->T, there is also a T->t and then, box'
+    --- only takes t/f for the cases T/t
+    eq box'(V) = box(V) .
+
+    op valid-case? : Matrix -> Bool .
+    eq valid-case?( ([ A : t, ASSG  ] : ID, 
+                     [ A : T, ASSG' ] : ID', ROWS)) = true .
+
+    eq valid-case?(ROWS) = false [owise] .
+
+    --- If a t is added, by hypothesis, there is a t and the box(t)=f
+    --- Conversely, if there is a f (due to box(t)), there is a T and bot(T)=t
+    --- The other value produced by box if F that doesn't need to be supported 
+    eq checkArrow(ROW, ROWS) = true .
+
+endm 
+
+view KTB-Case-Box2 from TH-BOX to KTB-CASE-BOX2 is endv
+
+mod CHECK-ANALITICITY-BOX2 is
+    pr ANALITICITY-BOX{KTB, KTB-Case-Box2} .
+endm
+
+--- Case IMP1: there is no t -> f in the matrix 
+mod KTB-CASE-IMP1 is
+    pr KTB-CHECK .
+
+    --- --------------------
+    vars V V' : BValue .
+    vars ROWS ROWS'  : Matrix .
+    vars VNEW VNEW' : BValue .
+    vars ASSG ASSG' : SetAssignment .
+    var ID : Id .
+    var N : Nat .
+    --- --------------------
+
+    --- Extending implication 
+    op imp : BValue  BValue -> BValue .
+    op imp' : BValue  BValue -> SetBValue .
+
+    op imp : BValue BValue -> BValue .
+    eq imp(F, V) = T .
+    eq imp(V, T) = T .
+    eq imp(T, t) = t .
+    eq imp(T, f) = f .
+    eq imp(T, F) = F .
+    eq imp(t, F) = f .
+    eq imp(f, F) = t .
+    eq imp(t, f) = f .
+    eq imp(V, V') = T [owise] .
+
+    eq imp'(F, V) = T .
+    eq imp'(V, T) = T .
+    eq imp'(T, t) = t .
+    eq imp'(T, f) = f .
+    eq imp'(T, F) = F .
+    eq imp'(t, F) = f .
+    eq imp'(f, F) = t .
+    eq imp'(t, f) = f .
+    eq imp'(V, V') = t, T [owise] .
+
+
+    op valid-case? : Matrix -> Bool .
+    ceq valid-case?(([ A : V, B : V', ASSG] : ID, ROWS)) = false
+        if V in (T, t) and-then V' in (F, f) .
+    eq valid-case?(ROWS) = true [owise] .
+
+   eq checkArrow(empty, ROWS) = true .
+   eq checkArrow( ([ NEW : VNEW,  ASSG ] : 1 , ROWS ), ROWS') =
+                 arrow(VNEW) == empty or-else checkFstRow(VNEW, ROWS') .
+
+   --- Check if the row ID=1 is supported 
+   op checkFstRow : BValue Matrix -> Bool .
+   eq checkFstRow(VNEW, ([ NEW : VNEW', ASSG'] : N <- 1, ROWS')) = 
+                  check-arrow(VNEW, VNEW') or-else 
+                  checkFstRow(VNEW, ROWS') .
+   eq checkFstRow(VNEW, ROWS) = false [owise] .
+
+
+endm 
+
+view KTB-Case-Imp1 from TH-IMP to KTB-CASE-IMP1 is endv
+
+
+mod CHECK-ANALITICITY-IMP1 is
+    pr ANALITICITY-IMP{KTB, KTB-Case-Imp1} .
+endm
+
+
+--- Case IMP2: there is a row t -> f in the matrix 
+mod KTB-CASE-IMP2 is
+    pr KTB-CHECK .
+
+    --- --------------------
+    vars V V' : BValue .
+    vars ROWS ROWS'  : Matrix .
+    vars VNEW VNEW' : BValue .
+    vars ASSG ASSG' : SetAssignment .
+    var ID : Id .
+    var N : Nat .
+    --- --------------------
+
+    --- Extending implication 
+    op imp : BValue  BValue -> BValue .
+    op imp' : BValue  BValue -> SetBValue .
+
+    op imp : BValue BValue -> BValue .
+    eq imp(F, V) = T .
+    eq imp(V, T) = T .
+    eq imp(T, t) = t .
+    eq imp(T, f) = f .
+    eq imp(T, F) = F .
+    eq imp(t, F) = f .
+    eq imp(f, F) = t .
+
+    --- case 2: there is  t -> f  and then, the lower case are chosen 
+    eq imp(t, t) = t .
+    eq imp(f, f) = t .
+    eq imp(f, t) = t .
+    eq imp(t, f) = f . 
+
+    eq imp'(F, V) = T .
+    eq imp'(V, T) = T .
+    eq imp'(T, t) = t .
+    eq imp'(T, f) = f .
+    eq imp'(T, F) = F .
+    eq imp'(t, F) = f .
+    eq imp'(f, F) = t .
+    eq imp'(t, f) = f .
+    eq imp'(V, V') = t, T [owise] .
+
+    op valid-case? : Matrix -> Bool .
+    ceq valid-case?(([ A : V, B : V', ASSG] : ID, ROWS)) = true
+        if V in (T, t) and-then V' in (F, f) .
+    eq valid-case?(ROWS) = false [owise] .
+
+   eq checkArrow(empty, ROWS) = true .
+   eq checkArrow( ([ NEW : VNEW,  ASSG ] : 1 , ROWS ), ROWS') =
+                 arrow(VNEW) == empty or-else checkFstRow(VNEW, ROWS') .
+
+   --- Check if the row ID=1 is supported 
+   op checkFstRow : BValue Matrix -> Bool .
+   eq checkFstRow(VNEW, ([ NEW : VNEW', ASSG'] : N <- 1, ROWS')) = 
+                  check-arrow(VNEW, VNEW') or-else 
+                  checkFstRow(VNEW, ROWS') .
+   eq checkFstRow(VNEW, ROWS) = false [owise] .
+
+endm 
+
+
+view KTB-Case-Imp2 from TH-IMP to KTB-CASE-IMP2 is endv
+
+mod CHECK-ANALITICITY-IMP2 is
+    pr ANALITICITY-IMP{KTB, KTB-Case-Imp2} .
+
+    var ROWS : Matrix . 
+    var N : Nat .
+    vars ATTS ATTS' : SetAssignment .
+    vars ID : Id .
+endm
+
+eof
+
+---- BOX CASE OK
+dsrew in CHECK-ANALITICITY-BOX1  : initBox using guess ! ; depC ; depA ; guess ! ; value ! ; guess ! ; ignore ; (match no-case ? fail : idle) ; one(simplify) ! ; check .
+dsrew in CHECK-ANALITICITY-BOX2  : initBox using guess ! ; depC ; depA ; guess ! ; value ! ; guess ! ; ignore ; (match no-case ? fail : idle) ; one(simplify) ! ; check .
+
+--- Solution 4896
+--- rewrites: 2090179 in 2636ms cpu (2648ms real) (792678 rewrites/second)
+
+dsrew in CHECK-ANALITICITY-IMP1  : initImp using guess ! ; depC ; depA ; depB ; guess ! ; value ! ; guess ! ; ignore ; (match no-case ? fail : idle) ; one(simplify) ! ; check .
+
+--- There are some fails showing that the first row is t -> f and the other rows shows T for the implication. This is 
+--- not possible due to symmetry: the other row is related to the first row and then, only lower values must be chosen, 
+dsrew in CHECK-ANALITICITY-IMP2  : initImp using guess ! ; depC ; depA ; depB ; guess ! ; value ! ; guess ! ; ignore ; (match no-case ? fail : idle) ; one(simplify) ! ; check ;
+    (match (fail ( ([ A : t, B : f, ATTS ] : 1, [ B : t, NEW : T, ATTS'] : ID   ,ROWS ) )) ? fail : idle) ;
+    (match (fail ( ([ A : t, B : f, ATTS ] : 1, [ A : f, NEW : T, ATTS'] : ID   ,ROWS ) )) ? fail : idle) ;
+    (match (fail ( ([ A : t, B : F, ATTS ] : 1, [ A : f, NEW : T, ATTS'] : ID   ,ROWS ) )) ? fail : idle) ;
+    (match (fail ( ([ A : T, B : f, ATTS ] : 1, [ B : t, NEW : T, ATTS'] : ID   ,ROWS ) )) ? fail : idle) ;
+    (match (fail ( ([ A : T, B : f, ATTS ] : 1, [ A : f, NEW : T, ATTS'] : ID   ,ROWS ) )) ? fail : idle) ;
+    match FS:FState .

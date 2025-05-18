@@ -1,0 +1,239 @@
+--- Logic : S5 
+
+load ./base .
+load ./analiticity .
+
+--- Sets for S5 and dependencies 
+fmod S5-SPEC is
+    pr STATE .
+
+    --- ---------------
+    var V  : BValue .
+    --- ---------------
+
+    --- Sets 
+    ops ALL D ND N I P PN : -> SetBValue .
+    eq D = T, t .
+    eq ND = F, f .
+    eq N = T .
+    eq I = F .
+    eq P = T, t, f .
+    eq PN = F, f, t .
+    eq ALL = T, t, F, f .
+
+    --- Dependencies 
+    op arrow : Value   -> SetBValue .
+    eq arrow(t) = f .
+    eq arrow(f) = t .
+    eq arrow(V) = empty [owise] .
+
+    op arrow2 : Value   -> SetBValue .
+    eq arrow2(V) = empty .
+
+    --- Support (values in the relCondition)
+    op support : Value -> SetBValue .
+    eq support(T) = T .
+    eq support(F) = F .
+    eq support(V) = t, f [owise] .
+endfm
+
+
+view S5 from TH-LOGIC to S5-SPEC is endv
+
+--- Procedures for checking whether the matrix is OK
+mod S5-CHECK is
+    pr CHECK-REL{ S5 } .
+
+    --- --------------------
+    vars V VNEW VNEW'  : BValue .
+    vars VA VB VC : BValue .
+    var N         : Nat .
+    vars ROWS ROWS' : Matrix .
+    vars ASSG ASSG' : SetAssignment .
+    vars ID ID' : Id .
+    --- --------------------
+
+    --- Checking if the matrix satisfies the conditions 
+    op check : Matrix -> Bool .
+    op checkRel : Row Matrix -> Bool .
+    op checkArrow : Matrix Matrix -> Bool .
+
+    eq check ( ([ ASSG ] : 1 , ROWS)) = checkRel( [ ASSG ] : 1, ROWS) and-then 
+                                     checkArrow(( [ ASSG ] : 1      ), ([ ASSG ] : 1, ROWS)) .
+
+    --- No more rows to be checked 
+    eq checkRel ( [ ASSG ] : 1, empty) = true .
+    --- A row generated from 1 must be checked 
+    eq checkRel (  [ NEW : VNEW , ASSG  ] : 1,
+                  ([ NEW : VNEW', ASSG' ] : N <- 1, ROWS)) = check-rel(VNEW, VNEW') and-then
+       checkRel( [ NEW : VNEW, ASSG ] : 1, ROWS) .
+
+   --- In S5, since RelCondition is an equivalent relation, we can search for "supports" in any of the rows
+   eq checkArrow(empty, ROWS) = true .
+   ceq checkArrow( ([ NEW : VNEW,  ASSG ] : ID , ROWS ), 
+                   ([ NEW : VNEW', ASSG'] : ID', ROWS')) = 
+       checkArrow( (                        ROWS ), 
+                   ([ NEW : VNEW', ASSG'] : ID', ROWS')) 
+       if check-arrow(VNEW, VNEW') .
+    
+   eq checkArrow(ROWS, ROWS') = false [owise] .
+
+endm
+
+--- A unique case to extend the BOX
+mod S5-CASE-BOX is
+    pr S5-CHECK .
+
+    --- --------------------
+    var V : BValue .
+    var ROWS  : Matrix .
+    --- --------------------
+
+    --- Extending box 
+    op box : BValue        -> BValue .
+    op box' : BValue        -> SetBValue .
+
+    --- Extending the matrix 
+    eq box(T) = T .
+    eq box(V) = F [owise] .
+
+    eq box'(V) = box(V) .
+
+   --- No case is discharged here 
+   op valid-case? : Matrix -> Bool .
+   eq valid-case?(ROWS) = true .
+
+endm 
+
+view S5-Case-Box from TH-BOX to S5-CASE-BOX is endv
+
+mod CHECK-ANALITICITY-BOX is
+    pr ANALITICITY-BOX{S5, S5-Case-Box} .
+endm
+
+--- Case IMP1: there is no t -> f in the matrix 
+mod S5-CASE-IMP1 is
+    pr S5-CHECK .
+
+    --- --------------------
+    vars V V' : BValue .
+    var ROWS  : Matrix .
+    var ASSG : SetAssignment .
+    var ID : Id .
+    --- --------------------
+
+    --- Extending implication 
+    op imp : BValue  BValue -> BValue .
+    op imp' : BValue  BValue -> SetBValue .
+
+    op imp : BValue BValue -> BValue .
+    eq imp(F, V) = T .
+    eq imp(V, T) = T .
+    eq imp(T, t) = t .
+    eq imp(T, f) = f .
+    eq imp(T, F) = F .
+    eq imp(t, F) = f .
+    eq imp(f, F) = t .
+
+    eq imp(t, f) = f . --- This will never appear 
+    eq imp(V, V') = T [owise] .
+
+    --- In S5, if row1 doesn't have a t->f, then row2 satisfies the same 
+    --- condition and both rows use the same function
+    eq imp'(V,V') = imp(V,V') .
+
+   --- If there is a valuation A = t and B = f, the case is not valid 
+   op valid-case? : Matrix -> Bool .
+   eq valid-case?(([ A : t, B : f, ASSG] : ID, ROWS)) = false .
+   eq valid-case?(ROWS) = true [owise] .
+
+endm 
+
+view S5-Case-Imp1 from TH-IMP to S5-CASE-IMP1 is endv
+
+
+mod CHECK-ANALITICITY-IMP1 is
+    pr ANALITICITY-IMP{S5, S5-Case-Imp1} .
+endm
+
+
+--- Case IMP2: there is a row t -> f in the matrix 
+mod S5-CASE-IMP2 is
+    pr S5-CHECK .
+
+    --- --------------------
+    vars V V' : BValue .
+    vars VA VB VC : BValue .
+    var ROWS  : Matrix .
+    var ASSG : SetAssignment .
+    var ID : Id .
+    var SV  : SetBValue . 
+    --- --------------------
+
+    --- Extending implication 
+    op imp : BValue  BValue -> BValue .
+    op imp' : BValue  BValue -> SetBValue .
+
+    op imp : BValue BValue -> BValue .
+    eq imp(F, V) = T .
+    eq imp(V, T) = T .
+    eq imp(T, t) = t .
+    eq imp(T, f) = f .
+    eq imp(T, F) = F .
+    eq imp(t, F) = f .
+    eq imp(f, F) = t .
+
+    --- case 2: there is  t -> f  and then, the lower case are chosen 
+    eq imp(t, t) = t .
+    eq imp(f, f) = t .
+    eq imp(f, t) = t .
+    eq imp(t, f) = f . 
+
+    --- If row 0 satisfies the confition of having a t->f row, so row 1. 
+    eq imp'(V,V') = imp(V,V') .
+
+    --- All the cases are valid 
+   op valid-case? : Matrix -> Bool .
+   eq valid-case?(ROWS) = true .
+
+   --- If the first row is of the form t/f -> t/f
+   --- add a support t f (by hypothesis)
+   --- any support for C is OK (it doesn't affect the "support") 
+   crl [addF] : { [ C : VC, A : VA, B : VB, NEW : V ] : 1, ROWS} => 
+                { [ C : VC, A : VA, B : VB, NEW : V ] : 1, 
+                  [ C : V', A : t,  B : f,  NEW : imp(t, f) ] : 2 <- 1,
+                ROWS }
+    if VA in (t, f) and-then VB in (t,f) and-then not(VA == t and VB == f) and-then 
+       no-t-f(ROWS) /\
+       V', SV := support(VC) . 
+
+    op no-t-f : Matrix -> Bool .
+    eq no-t-f( ([ A : t, B : f, ASSG ] : ID, ROWS)) = false .
+    eq no-t-f(ROWS) = true [owise] .
+endm 
+
+
+view S5-Case-Imp2 from TH-IMP to S5-CASE-IMP2 is endv
+
+mod CHECK-ANALITICITY-IMP2 is
+    pr ANALITICITY-IMP{S5, S5-Case-Imp2} .
+endm
+
+eof
+
+--- Commands 
+
+--- Check Box
+dsrew in CHECK-ANALITICITY-BOX   : initBox using guess ! ; depC ; depA ; guess ! ; value ! ; guess ! ; ignore ; (match no-case ? fail : idle) ; one(simplify) ! ; check .
+dsrew in CHECK-ANALITICITY-BOX   : initBox using guess ! ; depC ; depA ; guess ! ; value ! ; guess ! ; ignore ; (match no-case ? fail : idle) ; one(simplify) ! ; check ; match (FS:FState) .
+
+--- Implication 1
+dsrew in CHECK-ANALITICITY-IMP1   : initImp using guess ! ; depC ; depA ; depB ; guess ! ; value ! ; guess ! ; ignore ; (match no-case ? fail : idle) ; one(simplify) ! ; check .
+---- Checking failing states 
+dsrew in CHECK-ANALITICITY-IMP1   : initImp using guess ! ; depC ; depA ; depB ; guess ! ; value ! ; guess ! ; ignore ; (match no-case ? fail : idle) ; one(simplify) ! ; check ; match (FS:FState) .
+
+--- Implication 2
+--- The t->f conditions is forced with the rule addF
+dsrew in CHECK-ANALITICITY-IMP2   : initImp using guess ! ; depC ; depA ; depB ; guess ! ; value ! ; guess ! ; ignore ; (match no-case ? fail : idle) ; one(simplify) ! ; try(one(addF)) ; check .
+dsrew in CHECK-ANALITICITY-IMP2   : initImp using guess ! ; depC ; depA ; depB ; guess ! ; value ! ; guess ! ; ignore ; (match no-case ? fail : idle) ; one(simplify) ! ; try(one(addF)) ; check ; match (FS:FState) .
+

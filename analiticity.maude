@@ -1,0 +1,106 @@
+***(
+
+Procedure for testing analyticity. The idea is the following: 
+
+1. A "partial model is computed by non-deterministically assigning values to A
+(case of BOX) and A and B (case of IMP). In the analysis of both connectives,
+another column C is added. This column is used to test whether, by extending
+the model, the possible rows supporting C are well extended. These three
+formulas (A,B,C), characterize each case to be tested. 
+
+2. The BOX or IMP formula is completed determinitically according to each case.
+
+3. The extension is checked to see if it satisfies the relational conditions.
+
+***)
+
+mod ANALITICITY-BOX{L :: TH-LOGIC, CASE :: TH-BOX} is
+    inc CHECK-BASE-BOX{L , CASE} .
+
+    --- -----------------------------------
+    var N               : Nat .
+    var ROWS            : Matrix .
+    var ASSG            : SetAssignment .
+    vars VA VB VC       : BValue .
+    vars SV SV'         : SetBValue . 
+    --- -----------------------------------
+
+    --- Initial configuration for checking BOX
+    op initBox : -> State .
+    eq initBox = { [ C : ? , A : ?, NEW : ?f ] : 1 } .
+
+    --- Generating dependencies due to C
+    crl  [depC] :  [ C : ?s VC,   A : ?s VA,            ASSG ] : 1 => 
+                   [ C :    VC,   A : ?s VA,            ASSG ] : 1, 
+                   if SV == empty then empty
+                   else 
+                   [ C : ?[ SV ], A : ?[ support(VA) ], NEW : ?f' ]  : 2 <- 1  --- new row 
+                   fi ,
+                   if SV' == empty then empty
+                   else 
+                   [ C : ?[ SV' ], A : ?[ support(VA) ], NEW : ?f' ]  : 2 <- 1  --- new row 
+                   fi 
+
+     if SV  := arrow(VC) /\
+        SV' := arrow2(VC) .
+
+    --- Dependencies due to A
+    crl  [depA] :  [ C : VC, A : ?s VA, ASSG ] : 1 =>
+                   [ C : VC, A :    VA, ASSG ] : 1, 
+                   if SV == empty then empty
+                   else
+                   [ C : ?[ support(VC) ], A : ?[ SV ], NEW : ?f' ] : 2 <- 1 
+                   fi , 
+                   if SV' == empty then empty
+                   else
+                   [ C : ?[ support(VC) ], A : ?[ SV' ], NEW : ?f' ] : 2 <- 1 
+                   fi 
+
+     if SV  := arrow(VA) /\
+        SV' := arrow2(VA) .
+
+endm
+
+mod ANALITICITY-IMP{L :: TH-LOGIC, CASE :: TH-IMP} is
+    inc CHECK-BASE-IMP{L , CASE} .
+
+    --- -----------------------------------
+    var N               : Nat .
+    var ROWS            : Matrix .
+    var ASSG            : SetAssignment .
+    vars VA VB VC       : BValue .
+    vars SV             : SetBValue . 
+    --- -----------------------------------
+
+    --- Initial configuration for checking IMP
+    op initImp : -> State .
+    eq initImp = { [ C : ? , A : ?, B : ? , NEW : ?f ] : 1 } .
+
+
+    --- Dependencies of C
+    crl  [depC] :  [ C : ?s VC, A : ?s VA, B : ?s VB, ASSG ] : 1 =>
+                   [ C :    VC, A : ?s VA, B : ?s VB, ASSG ] : 1,
+                   if SV == empty then empty 
+                   else 
+                   [ C : ?[ SV ], A : ?[ support(VA) ], B : ?[ support(VB) ], NEW : ?f' ] : 2 <- 1
+                   fi  
+     if SV := arrow(VC) .
+
+    --- Dependencies of A
+    crl  [depA] :  [ C :  VC, A : ?s VA, B : ?s VB, ASSG ] : 1 =>
+                   [ C :  VC, A :    VA, B : ?s VB, ASSG ] : 1,
+                   if SV == empty then empty 
+                   else 
+                   [ C : ?[ support(VC) ], A : ?[ SV ], B : ?[ support(VB) ], NEW : ?f' ] : 2 <- 1
+                   fi  
+     if SV := arrow(VA) .
+
+    --- Dependencies of B
+    crl  [depB] :  [ C :  VC, A :  VA, B : ?s VB, ASSG ] : 1 =>
+                   [ C :  VC, A :  VA, B :    VB, ASSG ] : 1,
+                   if SV == empty then empty 
+                   else 
+                   [ C : ?[ support(VC) ], A : ?[ support(VA) ], B : ?[ SV ], NEW : ?f' ] : 2 <- 1
+                   fi  
+     if SV := arrow(VB) .
+endm

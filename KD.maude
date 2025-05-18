@@ -1,0 +1,193 @@
+--- KD
+load ./base .
+load ./analiticity .
+
+--- Sets for KD and dependencies 
+fmod KD-SPEC is
+    pr STATE .
+
+    --- ---------------
+    var V  : BValue .
+    --- ---------------
+
+    --- Sets 
+    ops ALL D ND N I P PN : -> SetBValue .
+    eq D = T, t, t2 .
+    eq ND = F, f, f2 .
+    eq N = T, f2 .
+    eq I = F, t2 .
+    eq P = T, t, f, f2 .
+    eq PN = F, f, t, t2 .
+    eq ALL = T, t, F, f, t2, f2 .
+
+    --- Dependencies 
+    op arrow : Value   -> SetBValue .
+    eq arrow(T) = T, t, t2 .
+    eq arrow(t) = T, t, t2 .
+    eq arrow(t2) = F, f, f2 .
+    eq arrow(f2) = T, t, t2 .
+    eq arrow(f) = T, t, t2 .
+    eq arrow(F) = F, f, f2 .
+
+    op arrow2 : Value   -> SetBValue .
+    op arrow2 : Value   -> SetBValue .
+    eq arrow2(t) = F, f, f2 .
+    eq arrow2(f) = F, f, f2 .
+    eq arrow2(V) = empty [owise] .
+
+    --- Support (values in the relCondition)
+    op support : Value -> SetBValue .
+    eq support(T) = T, t, t2 .
+    eq support(t2) = F, f, f2 .
+    eq support(F) = F, f, f2 .
+    eq support(f2) = T, t, t2 .
+    eq support(V) = ALL [owise] .
+
+
+endfm
+
+
+view KD from TH-LOGIC to KD-SPEC is endv
+
+--- Procedures for checking whether the matrix is OK
+mod KD-CHECK is
+    pr CHECK-REL{ KD } .
+
+    --- --------------------
+    vars V VNEW VNEW'  : BValue .
+    var N         : Nat .
+    var SV        : SetBValue . 
+    vars ROWS ROWS' : Matrix .
+    vars ASSG ASSG' : SetAssignment .
+    vars ID ID' : Id .
+    --- --------------------
+    --- Checking if the matrix satisfies the conditions 
+    op check : Matrix -> Bool .
+    op checkRel : Row Matrix -> Bool .
+    op checkArrow : Matrix Matrix -> Bool .
+
+    eq check ( ([ ASSG ] : 1 , ROWS)) = checkRel( [ ASSG ] : 1, ROWS) and-then 
+                                     checkArrow(( [ ASSG ] : 1      ), ([ ASSG ] : 1, ROWS)) .
+
+    --- No more rows to be checked 
+    eq checkRel ( [ ASSG ] : 1, empty) = true .
+    --- A row generated from 1 must be checked 
+    eq checkRel (  [ NEW : VNEW , ASSG  ] : 1,
+                  ([ NEW : VNEW', ASSG' ] : N <- 1, ROWS)) = check-rel(VNEW, VNEW') and-then
+       checkRel( [ NEW : VNEW, ASSG ] : 1, ROWS) .
+
+
+
+endm
+
+
+mod KD-CASE-BOX is
+    pr KD-CHECK .
+
+    --- --------------------
+    vars V V' V'' : BValue .
+    vars VA VC VNEW : BValue . 
+    var ROWS  : Matrix .
+    var ROW   : Row .
+    vars ASSG ASSG' ASSG'' : SetAssignment .
+    vars ID ID' ID'' : Id .
+    --- --------------------
+
+    --- Extending box 
+    op box : BValue        -> BValue .
+    op box1 : BValue        -> BValue .
+    op box2 : BValue        -> BValue .
+    op box3 : BValue        -> BValue .
+    op box' : BValue        -> SetBValue .
+
+    --- Extending the matrix
+    --- box if not defined here since it is not used by rulue value (overwritten here as value')
+
+    eq box1(T) = t .
+    eq box1(t) = f .
+    eq box1(t2) = f .
+    eq box1(f2) = t .
+    eq box1(f) = f .
+    eq box1(F) = f .
+
+    eq box2(T) = T .
+    eq box2(t) = f2 .
+    eq box2(t2) = f2 .
+    eq box2(f2) = T .
+    eq box2(f) = f2 .
+    eq box2(F) = f2 .
+
+    eq box3(T) = t2 .
+    eq box3(t) = F .
+    eq box3(t2) = F .
+    eq box3(f2) = t2 .
+    eq box3(f) = F .
+    eq box3(F) = F .
+
+    eq box'(T) = T, t, t2 .
+    eq box'(t) = F, f, f2 .
+    eq box'(t2) = F, f, f2 .
+    eq box'(f2) = T, t, t2 .
+    eq box'(f) = F, f, f2 .
+    eq box'(F) = F, f, f2 .
+
+
+
+    op valid-case? : Matrix -> Bool .
+    eq valid-case?( ROWS) = true .
+
+
+    --- Checking arrow for t/f (Two arrows)
+    ceq checkArrow([ NEW : V,  ASSG  ] : 1, 
+                   (ROWS, 
+                    [ NEW : V' ,  ASSG'   ] : ID', 
+                    [ NEW : V'',  ASSG''  ] : ID'')) = true
+        if V in (t,f) and-then V' in arrow(V) and-then  V'' in arrow2(V) .
+
+    --- The other cases that need only one arrow 
+    ceq checkArrow([ NEW : V,  ASSG  ] : 1, 
+                   (ROWS, 
+                    [ NEW : V' ,  ASSG'   ] : ID')) = true
+        if not(V in (t,f)) and-then V' in arrow(V) .
+
+    eq checkArrow(ROW, ROWS) = false [owise] .
+
+
+    op two-values : Matrix -> Bool .
+    ceq two-values(  ([ A : V,  ASSG  ] : ID, 
+                      [ A : V', ASSG' ] : ID', ROWS)) = true 
+         if V in (T, f2) and-then V' in (F, f, t, t2) .
+    eq two-values(ROWS) = false [owise] .
+
+    op all-t-f2 : Matrix -> Bool .
+    ceq all-t-f2(  ([ A : V,  ASSG  ] : ID, ROWS)) = false
+            if not ( V in (T, f2)) .
+    eq all-t-f2(ROWS) = true [owise] .
+
+
+    --- Customized rules for assigning values in all the cases
+    rl [value'] :  { ROWS, [ ASSG,  A : VA, NEW : ?f ] : 1 }  => 
+        if two-values(ROWS) then
+            { ROWS, [ ASSG,  A : VA, NEW : box1(VA)  ] : 1 }
+        else (if all-t-f2(ROWS) then 
+                { ROWS, [ ASSG,  A : VA, NEW : box2(VA)  ] : 1 }
+             else
+                { ROWS, [ ASSG,  A : VA, NEW : box3(VA)  ] : 1 }
+             fi)
+       fi .
+
+    rl [value'] :  A : VA, NEW : ?f'  => A : VA , NEW : ?[ box'(VA) ] .
+
+endm 
+
+view KD-Case-Box from TH-BOX to KD-CASE-BOX is endv
+
+mod CHECK-ANALITICITY-BOX is
+    pr ANALITICITY-BOX{KD, KD-Case-Box} .
+endm
+
+
+eof
+
+dsrew  in CHECK-ANALITICITY-BOX  : initBox using guess ! ; depC ; depA ; guess ! ; value' ! ; guess ! ; one(simplify) ! ; check .
+

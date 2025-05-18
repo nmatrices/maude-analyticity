@@ -1,0 +1,249 @@
+***(
+  Basic definitions for testing analyticity 
+
+  In this module the truth-values for all the logics are defined. There are
+  some constructors (see module SET-VALUE) that denote "choices" in the sense
+  that rewrite rules will pick values for those place holders. 
+
+  The theories TH-BOX and TH-IMP below define the needed requirements, for each
+  logic, to specify the procedure that checks whether the extensions of a given
+  set of valuation is a valid model. 
+
+***)
+
+--- Values allowed in valuations
+fmod BVALUE is
+    sort BValue .
+    --- The standard values 
+    ops T t F f t1 t2 f1 f2 : -> BValue [ctor] .
+endfm
+
+--- Sets of Values
+view BValue from TRIV to BVALUE is 
+    sort Elt to BValue .
+endv
+
+--- Definitions for "guessing" values 
+fmod SET-VALUE is
+    pr SET{BValue} * (sort Set{BValue} to SetBValue ) .
+
+    sort Value .
+    subsort BValue < Value . 
+
+    --- A value to be guessed (and it may take any possible value)
+    op ? : -> Value [ctor] .
+    --- Guessing from a fixed set of values 
+    op ?[_] : SetBValue -> Value [ctor] .
+    --- A value that needs to be checked whether it requires a support or not
+    op ?s_ : BValue -> Value [ctor] .
+    --- A value that needs to be given a value deterministically 
+    op ?f : -> Value . 
+    op ?f' : -> Value . 
+endfm
+
+--- Propositions and assigments 
+fmod PROP is
+    pr SET-VALUE .
+
+    --- Propositions
+    sort Proposition .
+
+    --- Some "distinguished" propositions
+    --- Alternatively, using subsorts, e.g., subsort Nat < Proposition gives
+    --- us infinite set of propositions 
+    ops A B C D E : -> Proposition [ctor] .
+
+    --- Distinguished proposition for the new columns in the matrix 
+    ops NEW : -> Proposition [ctor] .
+
+    --- Assignments 
+    sort Assignment .
+    op _:_ : Proposition Value -> Assignment [ctor] .
+endfm
+
+--- Sets of assignments 
+view Assignment from TRIV to PROP is 
+    sort Elt to Assignment .
+endv
+
+--- Rows in the matrix 
+fmod ROW is
+    pr SET{Assignment} * (sort Set{Assignment} to SetAssignment ) .
+    pr NAT .
+
+    --- Identifiers and dependencies on rows 
+    sorts Id Dependency .
+    subsort Nat Dependency < Id .
+
+    --- i <- j means that i was created to support j 
+    op _<-_ : Nat Nat -> Dependency [ctor] .
+
+    --- Rows of the matrix
+    sort Row .
+    op [_]:_ : SetAssignment Id -> Row [ctor format(n d d d d d)] .
+endfm
+
+--- Sets of Rows 
+view Row from TRIV to ROW is 
+    sort Elt to Row .
+endv
+
+--- Matrix as a set of rows 
+fmod MATRIX is 
+    pr SET{Row} * (sort Set{Row} to Matrix) .
+endfm
+
+--- State for the analsysis
+fmod STATE is
+    pr MATRIX .
+
+    --- Failing states, OK states and States. 
+    sort State FState OKState .
+    subsort FState OKState < State . 
+
+    --- A Matrix { M } being checked 
+    op {_}     : Matrix -> State   [ctor format(n d n d)] .
+    --- A matrix that passes the tests
+    op ok      : Matrix -> OKState [ctor format(g o) ] .
+    --- A matrix that does not pass the tests 
+    op fail    : Matrix -> FState  [ctor format(r o) ] .
+    --- An invalid state (since it does not satisfy the hypothesis) 
+    op no-case :        -> State [ctor] .
+endfm
+
+--- A theory defining the distinguished sets of the logic 
+fth TH-LOGIC is
+    inc MATRIX .
+    ops ALL D ND N I P PN : -> SetBValue .
+
+    --- For each value, the set of values that can support that value 
+    op arrow : Value   -> SetBValue .
+    --- For logics that require two arrows per value
+    op arrow2 : Value   -> SetBValue .
+
+    --- Values that are allowed in the support relation 
+    op support : Value -> SetBValue .
+endfth
+
+--- In some logics, the functions determining the values of the BOX
+--- or IMP formula depend on cases (e.g., whether the matrix includes
+--- a particular value). The following theories specify how to extend
+--- BOX and IMP formulas and also the criteria to check whether a
+--- matrix satisfies the needed conditions 
+
+fth TH-CASE is
+    pr STATE .
+
+    --- Checking if the matrix satisfies the requirements 
+    op check : Matrix -> Bool .
+    --- Checking if the current matrix is a valid case (useful when it is
+    --- assumed that the matrix contains -or not- a specific row) 
+    op valid-case? : Matrix -> Bool .
+
+endfth
+
+
+fth TH-BOX is
+    inc TH-CASE .
+    --- How to extend box 
+    op box :  BValue -> BValue .
+    op box' : BValue -> SetBValue .
+endfth
+
+fth TH-IMP is
+    inc TH-CASE .
+
+    --- How to extend implication 
+    op imp : BValue BValue -> BValue .
+    op imp' : BValue BValue -> SetBValue .
+endfth
+
+--- Basic definitions for checking relations and arrows 
+fmod CHECK-REL{L :: TH-LOGIC} is 
+
+    pr STATE .
+
+    --- ------------------------
+    vars V V1 V2 : BValue .
+    --- ------------------------
+
+    --- Checking the relations condition 
+    op check-rel : Value Value -> Bool .
+    eq check-rel(V1, V2) = V2 in support(V1) .
+
+    --- Checking the "supporting" relation 
+    op check-arrow : Value Value -> Bool .
+    eq check-arrow(V1, V2) = arrow(V1) == empty or-else V2 in arrow(V1) .
+
+    --- For extensions of D that require checking 2 arrows 
+    op check-arrow2 : Value Value -> Bool .
+    eq check-arrow2(V1, V2) = arrow2(V1) == empty or-else V2 in arrow2(V1) .
+
+endfm
+
+--- Rules for guessing values, ignoring cases and checking matrices 
+mod BASE-RULES {L :: TH-LOGIC, CASE :: TH-CASE } is 
+
+    --- ------------------------
+    vars V V1 V2 : BValue .
+    var SV       : SetBValue .
+    var MAT      : Matrix .
+    vars N N'    : Nat .
+    var ASSG     : SetAssignment .
+    --- ------------------------
+
+    --- Assigning any value to ? 
+    crl [guess] :  ? => ?s V1 
+        if V1, SV := ALL .
+
+    --- Guessing a value for a set of possible values 
+    rl [guess] :  ?[ V1, SV ] => V1 .
+
+    --- Checking and reducing to the final state 
+    rl [check] : { MAT } => 
+        if check(MAT) then ok(MAT) else fail(MAT) fi .
+
+    --- Ignoring cases that are not consistent with the hypothesis
+    rl [ignore] : { MAT } =>
+        if valid-case?(MAT) then { MAT } else no-case fi .
+
+    --- Simplifying "equal" rows (with different IDs)
+    rl [simplify] : { MAT,
+                      [ ASSG ] : N  <- 1,
+                      [ ASSG ] : N' <- 1 } =>
+                    { MAT,
+                      [ ASSG ] : N  <- 1} .
+endm
+
+view TOCASEB from TH-CASE to TH-BOX is 
+endv
+view TOCASEI from TH-CASE to TH-IMP is 
+endv
+
+view TOLOGIC from TH-LOGIC to TH-LOGIC is  
+endv 
+
+--- Adding the rule to complete the column with a BOX
+mod CHECK-BASE-BOX{L :: TH-LOGIC, CASE :: TH-BOX} is
+    inc  BASE-RULES{TOLOGIC, TOCASEB}{L, CASE} .
+    
+    var VA : BValue .
+
+    --- Assigning values according to functions 
+    rl [value] :  A : VA, NEW : ?f   => A : VA , NEW : box(VA) .
+    rl [value] :  A : VA, NEW : ?f'  => A : VA , NEW : ?[ box'(VA) ] .
+endm
+
+--- Adding the rule to complete the column with an IMP
+mod CHECK-BASE-IMP{L :: TH-LOGIC, CASE :: TH-IMP } is
+    inc  BASE-RULES{TOLOGIC, TOCASEI}{L, CASE} .
+
+    --- ----------------
+    vars VA VB : BValue .
+    var MAT    : Matrix .
+    --- ----------------
+
+    --- Assigning values according to functions 
+    rl [value] :  A : VA, B : VB, NEW : ?f => A : VA , B : VB, NEW : imp(VA, VB) .
+    rl [value] :  A : VA, B : VB, NEW : ?f' => A : VA , B : VB, NEW : ?[ imp'(VA, VB) ] .
+endm 
