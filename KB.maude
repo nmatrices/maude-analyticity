@@ -1,9 +1,9 @@
---- KD
+--- KB
 load ./base .
 load ./analiticity .
 
---- Sets for KD and dependencies 
-fmod KD-SPEC is
+--- Sets for KB and dependencies 
+fmod KB-SPEC is
     pr STATE .
 
     --- ---------------
@@ -12,46 +12,47 @@ fmod KD-SPEC is
 
     --- Sets 
     ops ALL D ND N I P PN : -> SetBValue .
-    eq D = T, t, t2 .
-    eq ND = F, f, f2 .
-    eq N = T, f2 .
-    eq I = F, t2 .
+    eq D = T, t, t1, t2 .
+    eq ND = F, f, f1, f2 .
+    eq N = T, t1, f2 ,f1 .
+    eq I = F, f1, t2, t1 .
     eq P = T, t, f, f2 .
     eq PN = F, f, t, t2 .
-    eq ALL = T, t, F, f, t2, f2 .
+    eq ALL = T, t, F, f, t2, f2, t1, f1 .
 
     --- Dependencies 
     op arrow : Value   -> SetBValue .
-    eq arrow(T) = T, t, t2 .
-    eq arrow(t) = T, t, t2 .
-    eq arrow(t2) = F, f, f2 .
-    eq arrow(f2) = T, t, t2 .
-    eq arrow(f) = T, t, t2 .
-    eq arrow(F) = F, f, f2 .
+    eq arrow(T) = T, t .
+    eq arrow(t) = T, t .
+    eq arrow(t2) = f, f2 .
+    eq arrow(f2) = t, t2 .
+    eq arrow(f) = t, t2 .
+    eq arrow(F) = F, f .
 
     op arrow2 : Value   -> SetBValue .
     op arrow2 : Value   -> SetBValue .
-    eq arrow2(t) = F, f, f2 .
-    eq arrow2(f) = F, f, f2 .
+    eq arrow2(t) = f, f2 .
+    eq arrow2(f) = F, f .
     eq arrow2(V) = empty [owise] .
 
     --- Support (values in the relCondition)
     op support : Value -> SetBValue .
-    eq support(T) = T, t, t2 .
-    eq support(t2) = F, f, f2 .
-    eq support(F) = F, f, f2 .
-    eq support(f2) = T, t, t2 .
-    eq support(V) = ALL [owise] .
-
-
+    eq support(T) = T, t .
+    eq support(t) = T, t, f, f2 .
+    eq support(t1) = empty .
+    eq support(t2) = f, f2 .
+    eq support(f2) = t, t2 .
+    eq support(f1) = empty .
+    eq support(f) = F, f, t, t2 .
+    eq support(F) = F, f .
 endfm
 
 
-view KD from TH-LOGIC to KD-SPEC is endv
+view KB from TH-LOGIC to KB-SPEC is endv
 
 --- Procedures for checking whether the matrix is OK
-mod KD-CHECK is
-    pr CHECK-REL{ KD } .
+mod KB-CHECK is
+    pr CHECK-REL{ KB } .
 
     --- --------------------
     vars V VNEW VNEW'  : BValue .
@@ -75,14 +76,10 @@ mod KD-CHECK is
     eq checkRel (  [ NEW : VNEW , ASSG  ] : 1,
                   ([ NEW : VNEW', ASSG' ] : N <- 1, ROWS)) = check-rel(VNEW, VNEW') and-then
        checkRel( [ NEW : VNEW, ASSG ] : 1, ROWS) .
-
-
-
 endm
 
-
-mod KD-CASE-BOX is
-    pr KD-CHECK .
+mod KB-CASE-BOX is
+    pr KB-CHECK .
 
     --- --------------------
     vars V V' V'' : BValue .
@@ -101,21 +98,26 @@ mod KD-CASE-BOX is
     op box' : BValue        -> SetBValue .
 
     --- Extending the matrix
-    --- box if not defined here since it is not used by rulue value (overwritten here as value')
+    --- box if not defined here since it is not used by rule value (overwritten here as value')
 
     eq box1(T) = t .
     eq box1(t) = f .
     eq box1(t2) = f .
-    eq box1(f2) = t .
-    eq box1(f) = f .
-    eq box1(F) = f .
+    eq box1(f2) = t2 .
+    eq box1(f) = F .
+    eq box1(F) = F .
+    eq box1(t1) = t1 .
+    eq box1(f1) = t1 .
+
 
     eq box2(T) = T .
     eq box2(t) = f2 .
     eq box2(t2) = f2 .
-    eq box2(f2) = T .
-    eq box2(f) = f2 .
-    eq box2(F) = f2 .
+    eq box2(f2) = t2 .
+    eq box2(f) = F .
+    eq box2(F) = F .
+    eq box1(t1) = t1 .
+    eq box1(f1) = t1 .
 
     eq box3(T) = t2 .
     eq box3(t) = F .
@@ -123,14 +125,8 @@ mod KD-CASE-BOX is
     eq box3(f2) = t2 .
     eq box3(f) = F .
     eq box3(F) = F .
-
-    eq box'(T) = T, t, t2 .
-    eq box'(t) = F, f, f2 .
-    eq box'(t2) = F, f, f2 .
-    eq box'(f2) = T, t, t2 .
-    eq box'(f) = F, f, f2 .
-    eq box'(F) = F, f, f2 .
-
+    eq box1(t1) = t1 .
+    eq box1(f1) = t1 .
 
 
     op valid-case? : Matrix -> Bool .
@@ -166,27 +162,39 @@ mod KD-CASE-BOX is
 
 
     --- Customized rules for assigning values in all the cases
+
+    --- The decision of the value taken in the other lines depend
+    --- on the value in the first line. This is due to symmetry:
+    --- if the value in the 1st is in the set {T, f2}, we are
+    --- necessarily in the case box1 or box2. Otherwise, 
+    --- we are necessarily in the case box1 or box3. 
     rl [value'] :  { ROWS, [ ASSG,  A : VA, NEW : ?f ] : 1 }  => 
         if two-values(ROWS) then
-            { ROWS, [ ASSG,  A : VA, NEW : box1(VA)  ] : 1 }
+            { to-box(VA, ROWS), [ ASSG,  A : VA, NEW : box1(VA)  ] : 1 }
         else (if all-t-f2(ROWS) then 
-                { ROWS, [ ASSG,  A : VA, NEW : box2(VA)  ] : 1 }
+                { to-box(VA, ROWS), [ ASSG,  A : VA, NEW : box2(VA)  ] : 1 }
              else
-                { ROWS, [ ASSG,  A : VA, NEW : box3(VA)  ] : 1 }
+                { to-box(VA, ROWS), [ ASSG,  A : VA, NEW : box3(VA)  ] : 1 }
              fi)
        fi .
 
-    rl [value'] :  A : VA, NEW : ?f'  => A : VA , NEW : ?[ box'(VA) ] .
+    --- rl [value'] :  A : VA, NEW : ?f'  => A : VA , NEW : ?[ box'(VA) ] .
+
+    op to-box : BValue Matrix -> Matrix .
+    eq to-box(V, empty) = empty .
+    eq to-box(V, (  [ASSG, A : VA, NEW : ?f'  ] : ID , ROWS)) = 
+                 (  [ASSG, A : VA, NEW : ?[ if (V in (T, f2)) then box2(VA) else box3(VA) fi,  box1(VA)] ] : ID), 
+                  to-box(V, ROWS) .
 
 endm 
 
-view KD-Case-Box from TH-BOX to KD-CASE-BOX is endv
+view KB-Case-Box from TH-BOX to KB-CASE-BOX is endv
 
 mod CHECK-ANALITICITY-BOX is
-    pr ANALITICITY-BOX{KD, KD-Case-Box} .
+    pr ANALITICITY-BOX{KB, KB-Case-Box} .
 endm
 
-
-eof
+eof .
 
 dsrew  in CHECK-ANALITICITY-BOX  : initBox using guess ! ; depC ; depA ; guess ! ; value' ! ; guess ! ; one(simplify) ! ; check .
+dsrew  in CHECK-ANALITICITY-BOX  : initBox using guess ! ; depC ; depA ; guess ! ; value' ! ; guess ! ; one(simplify) ! ; check ; match S:FState .
