@@ -151,12 +151,12 @@ mod KD4-CASE-BOX is
     op two-values : Matrix -> Bool .
     ceq two-values(  ([ A : V,  ASSG  ] : ID, 
                       [ A : V', ASSG' ] : ID', ROWS)) = true 
-         if V in (T, f2) and-then V' in (F, f, t, t2) .
+         if V in N and-then not (V' in N) .
     eq two-values(ROWS) = false [owise] .
 
     op all-t-f2 : Matrix -> Bool .
     ceq all-t-f2(  ([ A : V,  ASSG  ] : ID, ROWS)) = false
-            if not ( V in (T, f2)) .
+            if not ( V in N) .
     eq all-t-f2(ROWS) = true [owise] .
 
 

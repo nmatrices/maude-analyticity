@@ -156,7 +156,7 @@ mod K-CASE-BOX is
     ceq checkArrow([ NEW : V,  ASSG  ] : 1, 
                    (ROWS, 
                     [ NEW : V' ,  ASSG'   ] : ID')) = true
-        if not(V in (t,f)) and-then V' in arrow(V) .
+        if not(V in (t,f)) and-then ( V in (t1,f1) or-else  V' in arrow(V) ) .
 
     eq checkArrow(ROW, ROWS) = false [owise] .
 
